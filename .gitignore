@@ -1,0 +1,17 @@
+node_modules/
+dist/
+*.log
+
+# Secrets and local state — never commit
+.env
+.env.*
+!.env.example
+
+# Local connector data (link state, encrypted cache + its key)
+data/
+*.sqlite
+*.sqlite-*
+*.key
+
+# Provider private keys (Enable Banking .pem) — never commit
+*.pem

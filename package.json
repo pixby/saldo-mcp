@@ -1,0 +1,62 @@
+{
+  "name": "saldo-mcp",
+  "version": "0.1.0",
+  "description": "Saldo local connector \u2014 read-only MCP bridge between Nordic bank accounts and AI assistants.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pixby/saldo-mcp.git"
+  },
+  "homepage": "https://saldo.sh",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "open-banking",
+    "psd2",
+    "enablebanking",
+    "claude",
+    "bank",
+    "finance",
+    "read-only"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "main": "dist/lib.js",
+  "types": "dist/lib.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/lib.d.ts",
+      "import": "./dist/lib.js"
+    }
+  },
+  "bin": {
+    "saldo": "dist/cli/index.js"
+  },
+  "files": [
+    "dist",
+    ".env.example"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js",
+    "saldo": "node dist/cli/index.js",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "express": "^5.1.0",
+    "selfsigned": "^2.4.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^24.0.0",
+    "@types/selfsigned": "^2.0.1",
+    "typescript": "^6.0.0"
+  }
+}
