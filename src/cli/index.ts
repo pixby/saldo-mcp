@@ -42,6 +42,14 @@ async function main(): Promise<void> {
     case "doctor":
       return runDoctor();
     case "connect-claude": {
+      // The Claude Desktop entry points at this install's absolute path; the
+      // npx cache gets evicted, which would break the connection silently later.
+      if (import.meta.url.includes("/_npx/")) {
+        console.error("connect-claude needs a permanent install (the npx cache is temporary).");
+        console.error("Run: npm install -g saldo-mcp && saldo connect-claude");
+        process.exitCode = 1;
+        return;
+      }
       const result = await connectToClaude();
       console.log(`✓ Registered Saldo in Claude Desktop (${result.path}).`);
       console.log("Restart Claude Desktop, then ask it about your spending.");

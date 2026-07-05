@@ -29,15 +29,22 @@ Requirements: Node 24+, a Swedish/Nordic bank account, and a free
 [Enable Banking](https://enablebanking.com) application (their *Restricted
 Production* tier: link your own accounts, real data, no contract).
 
+No install needed to try it — state lives in `~/.saldo/`, not in the package:
+
+```bash
+npx saldo-mcp init                    # wizard: managed or self-host (paste your EB app id + .pem path)
+npx saldo-mcp institutions SE
+npx saldo-mcp link "SE:Your Bank"     # BankID in the browser
+npx saldo-mcp sync                    # pull history into the encrypted cache
+npx saldo-mcp doctor                  # ✓/✗ health checks
+```
+
+To connect an assistant, install permanently (Claude Desktop launches the
+server from a fixed path, and the npx cache is temporary):
+
 ```bash
 npm install -g saldo-mcp
-
-saldo init                    # wizard: managed or self-host (paste your EB app id + .pem path)
-saldo institutions SE
-saldo link "SE:Your Bank"     # BankID in the browser
-saldo sync                    # pull history into the encrypted cache
-saldo connect-claude          # register in Claude Desktop, restart Claude
-saldo doctor                  # ✓/✗ health checks
+saldo connect-claude                  # register in Claude Desktop, restart Claude
 ```
 
 Prefer running from source? `git clone https://github.com/pixby/saldo-mcp.git && cd saldo-mcp && npm install && npm run build`, then use `node dist/cli/index.js` in place of `saldo`.
