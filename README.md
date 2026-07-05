@@ -1,5 +1,7 @@
 # saldo-mcp
 
+[![npm](https://img.shields.io/npm/v/saldo-mcp)](https://www.npmjs.com/package/saldo-mcp)
+
 **Ask your AI about your money — without your money data ever leaving your machine.**
 
 `saldo-mcp` is the open-source engine behind [Saldo](https://saldo.sh): a read-only
@@ -28,16 +30,17 @@ Requirements: Node 24+, a Swedish/Nordic bank account, and a free
 Production* tier: link your own accounts, real data, no contract).
 
 ```bash
-git clone https://github.com/pixby/saldo-mcp.git
-cd saldo-mcp && npm install && npm run build
+npm install -g saldo-mcp
 
-node dist/cli/index.js init          # wizard: managed or self-host (paste your EB app id + .pem path)
-node dist/cli/index.js institutions SE
-node dist/cli/index.js link "SE:Your Bank"   # BankID in the browser
-node dist/cli/index.js sync                  # pull history into the encrypted cache
-node dist/cli/index.js connect-claude        # register in Claude Desktop, restart Claude
-node dist/cli/index.js doctor                # ✓/✗ health checks
+saldo init                    # wizard: managed or self-host (paste your EB app id + .pem path)
+saldo institutions SE
+saldo link "SE:Your Bank"     # BankID in the browser
+saldo sync                    # pull history into the encrypted cache
+saldo connect-claude          # register in Claude Desktop, restart Claude
+saldo doctor                  # ✓/✗ health checks
 ```
+
+Prefer running from source? `git clone https://github.com/pixby/saldo-mcp.git && cd saldo-mcp && npm install && npm run build`, then use `node dist/cli/index.js` in place of `saldo`.
 
 Then ask Claude: *"What did I spend on groceries last month?"*
 

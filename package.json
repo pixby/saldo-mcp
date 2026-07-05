@@ -1,24 +1,7 @@
 {
   "name": "saldo-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Saldo local connector \u2014 read-only MCP bridge between Nordic bank accounts and AI assistants.",
-  "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/pixby/saldo-mcp.git"
-  },
-  "homepage": "https://saldo.sh",
-  "keywords": [
-    "mcp",
-    "model-context-protocol",
-    "open-banking",
-    "psd2",
-    "enablebanking",
-    "claude",
-    "bank",
-    "finance",
-    "read-only"
-  ],
   "type": "module",
   "engines": {
     "node": ">=24"
@@ -32,7 +15,8 @@
     }
   },
   "bin": {
-    "saldo": "dist/cli/index.js"
+    "saldo": "dist/cli/index.js",
+    "saldo-mcp": "dist/cli/index.js"
   },
   "files": [
     "dist",
@@ -58,5 +42,22 @@
     "@types/node": "^24.0.0",
     "@types/selfsigned": "^2.0.1",
     "typescript": "^6.0.0"
-  }
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pixby/saldo-mcp.git"
+  },
+  "homepage": "https://saldo.sh",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "open-banking",
+    "psd2",
+    "enablebanking",
+    "claude",
+    "bank",
+    "finance",
+    "read-only"
+  ]
 }

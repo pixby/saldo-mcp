@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 import { createEngine } from "../bootstrap.js";
 import { formatMoney } from "../util/money.js";
 import { balanceTypeLabel } from "../util/balance.js";
