@@ -20,11 +20,12 @@ export interface BrokerAccount {
   iban?: string;
 }
 
-/** What the broker says this device may do (subscription/trial state). */
+/** What the broker says this device may do (subscription state). The free
+ *  trial is a Polar subscription in its trial period — `trialing: true`. */
 export interface Entitlement {
-  status: "subscribed" | "trial" | "expired" | "unlimited";
+  status: "subscribed" | "unsubscribed" | "unlimited";
   plan: "individual" | "business";
-  trialEndsAt?: string;
+  trialing?: boolean;
   currentPeriodEnd?: string | null;
 }
 
