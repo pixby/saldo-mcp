@@ -1,6 +1,7 @@
 import type { Account, Balance, Transaction } from "./domain/types.js";
 import type { BankProvider } from "./providers/provider.js";
 import { type ConnectedSession, type ConsentStrategy, isExpired } from "./consent/consent.js";
+import type { Entitlement } from "./consent/consent.js";
 import type { Cache } from "./cache/cache.js";
 
 /** How much history a sync requests. Banks cap this (~90 days is typical for AIS
@@ -59,6 +60,22 @@ export class Engine {
    * Consent status with days-until-expiry, for renewal reminders. `expiringSoon`
    * flags sessions expiring within `withinDays` (default 14) or already expired.
    */
+  /** Subscription/trial state. Self-host has no billing → "unlimited". */
+  getEntitlement(): Promise<Entitlement> {
+    return (
+      this.consent.entitlement?.() ??
+      Promise.resolve({ status: "unlimited", plan: "individual" } as Entitlement)
+    );
+  }
+
+  /** Hosted checkout URL (managed mode only). */
+  createBillingCheckout(plan: "individual" | "business"): Promise<{ url: string }> {
+    if (!this.consent.createCheckout) {
+      return Promise.reject(new Error("Billing applies to the managed tier only."));
+    }
+    return this.consent.createCheckout(plan);
+  }
+
   async consentStatus(
     withinDays = 14,
   ): Promise<{ sessionId: string; institutionId: string; validUntil?: string; daysLeft?: number; expiringSoon: boolean }[]> {

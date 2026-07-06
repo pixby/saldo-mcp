@@ -20,6 +20,14 @@ export interface BrokerAccount {
   iban?: string;
 }
 
+/** What the broker says this device may do (subscription/trial state). */
+export interface Entitlement {
+  status: "subscribed" | "trial" | "expired" | "unlimited";
+  plan: "individual" | "business";
+  trialEndsAt?: string;
+  currentPeriodEnd?: string | null;
+}
+
 export class BrokerClient {
   private readonly deviceFile: string;
   private device?: { deviceId: string; deviceSecret: string };
@@ -71,6 +79,19 @@ export class BrokerClient {
   }
 
   /** A short-lived Enable Banking JWT to call EB directly. Cached until expiry. */
+  async entitlement(): Promise<Entitlement> {
+    const { entitlement } = await this.authed<{ entitlement: Entitlement }>(
+      "GET",
+      "/v1/entitlement",
+    );
+    return entitlement;
+  }
+
+  /** Hosted checkout URL for upgrading this device's subscription. */
+  async createCheckout(plan: "individual" | "business"): Promise<{ url: string }> {
+    return this.authed<{ url: string }>("POST", "/v1/billing/checkout", { plan });
+  }
+
   async getToken(force = false): Promise<string> {
     const now = Math.floor(Date.now() / 1000);
     if (force || !this.token || this.token.expiresAt - 60 <= now) {

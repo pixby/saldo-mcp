@@ -9,6 +9,7 @@ export { startHttpMcpServer } from "./mcp/http.js";
 export type { HttpMcpHandle } from "./mcp/http.js";
 export { loadConfig, ConfigError } from "./config.js";
 export type { Config, Mode } from "./config.js";
+export type { Entitlement } from "./broker-client.js";
 export { formatMinor, formatMoney, toMinorUnits } from "./util/money.js";
 export type {
   Account,

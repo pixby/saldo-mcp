@@ -1,4 +1,5 @@
 import type { Institution } from "../domain/types.js";
+import type { Entitlement } from "../broker-client.js";
 
 /** A bank connection the user has established (one consent session). */
 export interface ConnectedSession {
@@ -37,4 +38,12 @@ export interface ConsentStrategy {
 
   /** Remove a connection: drop it locally and best-effort revoke it at the provider. */
   disconnect(sessionId: string): Promise<void>;
+
+  /** Subscription/trial state, where a broker is involved. Self-host has no
+   *  billing, so these are optional; the engine substitutes "unlimited". */
+  entitlement?(): Promise<Entitlement>;
+  createCheckout?(plan: "individual" | "business"): Promise<{ url: string }>;
 }
+
+/** Re-exported billing shape (defined next to the broker client contract). */
+export type { Entitlement } from "../broker-client.js";

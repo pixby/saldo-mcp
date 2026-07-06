@@ -46,5 +46,13 @@ export class ManagedConsent implements ConsentStrategy {
   disconnect(sessionId: string): Promise<void> {
     return this.broker.disconnect(sessionId);
   }
+
+  entitlement() {
+    return this.broker.entitlement();
+  }
+
+  createCheckout(plan: "individual" | "business") {
+    return this.broker.createCheckout(plan);
+  }
 }
 
