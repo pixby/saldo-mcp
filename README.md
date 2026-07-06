@@ -55,6 +55,19 @@ Then ask Claude: *"What did I spend on groceries last month?"*
 
 (npm package coming: `npx saldo-mcp init` — after which the command is just `saldo`.)
 
+## Uninstall
+
+Everything lives on your machine — removal is ordinary file deletion:
+
+```bash
+npx saldo-mcp disconnect-claude   # unregister from Claude Desktop + Claude Code
+rm -rf ~/.saldo                   # config, encrypted cache + key
+npm uninstall -g saldo-mcp        # if you installed globally
+```
+
+Bank consents live at your bank (revoke in Enable Banking's control panel;
+they also expire on their own after ~180 days).
+
 ## MCP tools
 
 Seven read-only tools, designed so assistants answer cheaply from pre-computed
