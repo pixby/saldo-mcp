@@ -70,6 +70,18 @@ test("connect-claude registers a stdio entry and preserves other servers", async
   assert.ok(JSON.parse(await readFile(path, "utf8")).mcpServers.other, "others survive disconnect");
 });
 
+test("connect-claude via npx writes an npx-launched entry pinned to this version", async () => {
+  const dir = await tempDir("saldo-claude-npx-");
+  const path = join(dir, "claude_desktop_config.json");
+  const result = await connectToClaude(path, true);
+  assert.equal(result.viaNpx, true);
+  const config = JSON.parse(await readFile(path, "utf8"));
+  const entry = config.mcpServers.saldo;
+  assert.match(entry.command, /npx(\.cmd)?$/);
+  const version = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")).version;
+  assert.deepEqual(entry.args, ["-y", `saldo-mcp@${version}`, "serve"]);
+});
+
 test("saldo doctor reports missing config with a pointer to init", async () => {
   const dir = await tempDir("saldo-cli-");
   const env = { ...process.env, SALDO_DATA_DIR: dir };

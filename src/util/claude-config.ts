@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 /**
@@ -35,6 +36,22 @@ export function stdioServerPath(): string {
   return resolve(dirname(fileURLToPath(import.meta.url)), "..", "index.js");
 }
 
+/** True when this code runs out of the npx cache rather than a real install. */
+export function isNpxInstall(): boolean {
+  return fileURLToPath(import.meta.url).includes(`${sep}_npx${sep}`);
+}
+
+/** The npx binary that ships alongside the node running us — an absolute path,
+ *  because GUI-launched MCP clients spawn servers with a minimal PATH. */
+function npxBinPath(): string {
+  return join(dirname(process.execPath), process.platform === "win32" ? "npx.cmd" : "npx");
+}
+
+function packageVersion(): string {
+  const pkg = createRequire(import.meta.url)("../../package.json") as { version: string };
+  return pkg.version;
+}
+
 async function readConfig(path: string): Promise<ClaudeConfig> {
   try {
     return JSON.parse(await readFile(path, "utf8")) as ClaudeConfig;
@@ -51,21 +68,27 @@ export async function isConnectedToClaude(path = claudeConfigPath()): Promise<bo
   return Boolean(config.mcpServers && SERVER_KEY in config.mcpServers);
 }
 
-/** Register (or update) the Saldo stdio server, preserving other entries. */
+/** Register (or update) the Saldo stdio server, preserving other entries.
+ *
+ * Two launch styles: a real install gets node + the installed script (works
+ * offline, survives anything). Run via npx, we can't point at the cache (it
+ * gets evicted), so the entry launches through npx itself, pinned to the
+ * current version — npx re-fetches if the cache is gone. Re-run
+ * connect-claude after upgrading to move the pin. */
 export async function connectToClaude(
   path = claudeConfigPath(),
-): Promise<{ path: string; restartRequired: true }> {
+  viaNpx = isNpxInstall(),
+): Promise<{ path: string; restartRequired: true; viaNpx: boolean }> {
   const config = await readConfig(path);
-  const entry: { command: string; args: string[]; env?: Record<string, string> } = {
-    command: process.execPath, // the node that's running us — no PATH guessing
-    args: [stdioServerPath()],
-  };
+  const entry: { command: string; args: string[]; env?: Record<string, string> } = viaNpx
+    ? { command: npxBinPath(), args: ["-y", `saldo-mcp@${packageVersion()}`, "serve"] }
+    : { command: process.execPath, args: [stdioServerPath()] }; // the node running us — no PATH guessing
   // A custom data dir must follow the server into Claude's process.
   if (process.env.SALDO_DATA_DIR) entry.env = { SALDO_DATA_DIR: process.env.SALDO_DATA_DIR };
   config.mcpServers = { ...(config.mcpServers ?? {}), [SERVER_KEY]: entry };
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(config, null, 2) + "\n", "utf8");
-  return { path, restartRequired: true };
+  return { path, restartRequired: true, viaNpx };
 }
 
 export async function disconnectFromClaude(path = claudeConfigPath()): Promise<void> {

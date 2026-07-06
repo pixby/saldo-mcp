@@ -39,13 +39,14 @@ npx saldo-mcp sync                    # pull history into the encrypted cache
 npx saldo-mcp doctor                  # ✓/✗ health checks
 ```
 
-To connect an assistant, install permanently (Claude Desktop launches the
-server from a fixed path, and the npx cache is temporary):
-
 ```bash
-npm install -g saldo-mcp
-saldo connect-claude                  # register in Claude Desktop, restart Claude
+npx saldo-mcp connect-claude          # register in Claude Desktop, restart Claude
 ```
+
+`connect-claude` writes a Claude Desktop entry that launches the server via
+npx (absolute path, pinned to the current version — re-run it after
+upgrades). Prefer a fixed install? `npm install -g saldo-mcp` gives you the
+`saldo` command and pins Claude to that install instead.
 
 Prefer running from source? `git clone https://github.com/pixby/saldo-mcp.git && cd saldo-mcp && npm install && npm run build`, then use `node dist/cli/index.js` in place of `saldo`.
 

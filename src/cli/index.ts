@@ -25,6 +25,7 @@ const USAGE = [
   "  saldo sync                   pull latest transactions into the local cache",
   "  saldo sessions               list bank connections + consent expiry",
   "  saldo disconnect <id>        disconnect a bank connection (revokes consent)",
+  "  saldo serve                  run the MCP server on stdio (what Claude launches)",
   "  saldo connect-claude         register Saldo in Claude Desktop",
   "  saldo disconnect-claude      remove Saldo from Claude Desktop",
   "  saldo doctor                 check config, provider, cache, Claude setup",
@@ -41,17 +42,17 @@ async function main(): Promise<void> {
       return runInit(process.argv.slice(3));
     case "doctor":
       return runDoctor();
+    case "serve":
+      // Same stdio MCP server as running dist/index.js directly — this is what
+      // an npx-style Claude Desktop entry launches.
+      await import("../index.js");
+      return new Promise(() => {}); // stays up until the MCP client closes us
     case "connect-claude": {
-      // The Claude Desktop entry points at this install's absolute path; the
-      // npx cache gets evicted, which would break the connection silently later.
-      if (import.meta.url.includes("/_npx/")) {
-        console.error("connect-claude needs a permanent install (the npx cache is temporary).");
-        console.error("Run: npm install -g saldo-mcp && saldo connect-claude");
-        process.exitCode = 1;
-        return;
-      }
       const result = await connectToClaude();
       console.log(`✓ Registered Saldo in Claude Desktop (${result.path}).`);
+      if (result.viaNpx) {
+        console.log("Claude launches Saldo via npx, pinned to this version — re-run connect-claude after upgrades.");
+      }
       console.log("Restart Claude Desktop, then ask it about your spending.");
       return;
     }
