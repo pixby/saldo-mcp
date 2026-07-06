@@ -1,7 +1,9 @@
+import { execFile } from "node:child_process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import { isNpxInstall } from "./invocation.js";
 
@@ -73,20 +75,69 @@ export async function isConnectedToClaude(path = claudeConfigPath()): Promise<bo
  * gets evicted), so the entry launches through npx itself, pinned to the
  * current version — npx re-fetches if the cache is gone. Re-run
  * connect-claude after upgrading to move the pin. */
+export interface ServerEntry {
+  command: string;
+  args: string[];
+  env?: Record<string, string>;
+}
+
+/** The launch entry both Claude Desktop and Claude Code register. */
+export function serverEntry(viaNpx = isNpxInstall()): ServerEntry {
+  const entry: ServerEntry = viaNpx
+    ? { command: npxBinPath(), args: ["-y", `saldo-mcp@${packageVersion()}`, "serve"] }
+    : { command: process.execPath, args: [stdioServerPath()] }; // the node running us — no PATH guessing
+  // A custom data dir must follow the server into Claude's process.
+  if (process.env.SALDO_DATA_DIR) entry.env = { SALDO_DATA_DIR: process.env.SALDO_DATA_DIR };
+  return entry;
+}
+
 export async function connectToClaude(
   path = claudeConfigPath(),
   viaNpx = isNpxInstall(),
 ): Promise<{ path: string; restartRequired: true; viaNpx: boolean }> {
   const config = await readConfig(path);
-  const entry: { command: string; args: string[]; env?: Record<string, string> } = viaNpx
-    ? { command: npxBinPath(), args: ["-y", `saldo-mcp@${packageVersion()}`, "serve"] }
-    : { command: process.execPath, args: [stdioServerPath()] }; // the node running us — no PATH guessing
-  // A custom data dir must follow the server into Claude's process.
-  if (process.env.SALDO_DATA_DIR) entry.env = { SALDO_DATA_DIR: process.env.SALDO_DATA_DIR };
-  config.mcpServers = { ...(config.mcpServers ?? {}), [SERVER_KEY]: entry };
+  config.mcpServers = { ...(config.mcpServers ?? {}), [SERVER_KEY]: serverEntry(viaNpx) };
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(config, null, 2) + "\n", "utf8");
   return { path, restartRequired: true, viaNpx };
+}
+
+const exec = promisify(execFile);
+// execFile can't spawn .cmd shims without a shell.
+const CLAUDE_EXEC_OPTS = { shell: process.platform === "win32" } as const;
+
+/** Args for `claude mcp add` that mirror a Desktop entry (exported for tests). */
+export function claudeCodeAddArgs(entry: ServerEntry): string[] {
+  const args = ["mcp", "add", "--scope", "user"];
+  for (const [key, value] of Object.entries(entry.env ?? {})) args.push("--env", `${key}=${value}`);
+  args.push(SERVER_KEY, "--", entry.command, ...entry.args);
+  return args;
+}
+
+/**
+ * Register the same server in Claude Code (the CLI), if it's installed.
+ * Claude Code manages its own config, so we go through `claude mcp add`
+ * rather than editing its files. Remove-then-add makes re-runs idempotent.
+ */
+export async function connectToClaudeCode(
+  viaNpx = isNpxInstall(),
+): Promise<"registered" | "not-installed"> {
+  try {
+    await exec("claude", ["--version"], CLAUDE_EXEC_OPTS);
+  } catch {
+    return "not-installed";
+  }
+  await exec("claude", ["mcp", "remove", "--scope", "user", SERVER_KEY], CLAUDE_EXEC_OPTS).catch(
+    () => {}, // not registered yet — fine
+  );
+  await exec("claude", claudeCodeAddArgs(serverEntry(viaNpx)), CLAUDE_EXEC_OPTS);
+  return "registered";
+}
+
+export async function disconnectFromClaudeCode(): Promise<void> {
+  await exec("claude", ["mcp", "remove", "--scope", "user", SERVER_KEY], CLAUDE_EXEC_OPTS).catch(
+    () => {}, // claude missing or not registered — nothing to remove
+  );
 }
 
 export async function disconnectFromClaude(path = claudeConfigPath()): Promise<void> {

@@ -5,7 +5,12 @@ import { formatMoney } from "../util/money.js";
 import { balanceTypeLabel } from "../util/balance.js";
 import { runInit } from "./init.js";
 import { runDoctor } from "./doctor.js";
-import { connectToClaude, disconnectFromClaude } from "../util/claude-config.js";
+import {
+  connectToClaude,
+  connectToClaudeCode,
+  disconnectFromClaude,
+  disconnectFromClaudeCode,
+} from "../util/claude-config.js";
 
 /**
  * Setup CLI for the headless connector. Drives the bank-link (consent) flow and
@@ -29,8 +34,8 @@ const USAGE = [
   usageLine("sessions", "list bank connections + consent expiry"),
   usageLine("disconnect <id>", "disconnect a bank connection (revokes consent)"),
   usageLine("serve", "run the MCP server on stdio (what Claude launches)"),
-  usageLine("connect-claude", "register Saldo in Claude Desktop"),
-  usageLine("disconnect-claude", "remove Saldo from Claude Desktop"),
+  usageLine("connect-claude", "register Saldo in Claude Desktop + Claude Code"),
+  usageLine("disconnect-claude", "remove Saldo from Claude Desktop + Claude Code"),
   usageLine("doctor", "check config, provider, cache, Claude setup"),
   "",
   "Start the MCP server with: npm start",
@@ -53,15 +58,21 @@ async function main(): Promise<void> {
     case "connect-claude": {
       const result = await connectToClaude();
       console.log(`✓ Registered Saldo in Claude Desktop (${result.path}).`);
+      if ((await connectToClaudeCode()) === "registered") {
+        console.log("✓ Registered Saldo in Claude Code (user scope).");
+      } else {
+        console.log(`· Claude Code not detected — to add it later: claude mcp add saldo -- ${CLI === "saldo" ? "saldo" : "npx -y saldo-mcp"} serve`);
+      }
       if (result.viaNpx) {
         console.log("Claude launches Saldo via npx, pinned to this version — re-run connect-claude after upgrades.");
       }
-      console.log("Restart Claude Desktop, then ask it about your spending.");
+      console.log("Restart Claude Desktop (or open a new Claude Code session), then ask about your spending.");
       return;
     }
     case "disconnect-claude":
       await disconnectFromClaude();
-      console.log("Removed Saldo from Claude Desktop's config.");
+      await disconnectFromClaudeCode();
+      console.log("Removed Saldo from Claude Desktop and Claude Code.");
       return;
   }
 

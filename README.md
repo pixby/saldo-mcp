@@ -43,10 +43,11 @@ npx saldo-mcp doctor                  # ✓/✗ health checks
 npx saldo-mcp connect-claude          # register in Claude Desktop, restart Claude
 ```
 
-`connect-claude` writes a Claude Desktop entry that launches the server via
-npx (absolute path, pinned to the current version — re-run it after
-upgrades). Prefer a fixed install? `npm install -g saldo-mcp` gives you the
-`saldo` command and pins Claude to that install instead.
+`connect-claude` registers the server in **Claude Desktop** (writes its
+config) and in **Claude Code** (via `claude mcp add`, if the CLI is
+installed) — launched via npx, absolute path, pinned to the current version;
+re-run it after upgrades. Prefer a fixed install? `npm install -g saldo-mcp`
+gives you the `saldo` command and pins Claude to that install instead.
 
 Prefer running from source? `git clone https://github.com/pixby/saldo-mcp.git && cd saldo-mcp && npm install && npm run build`, then use `node dist/cli/index.js` in place of `saldo`.
 

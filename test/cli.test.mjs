@@ -5,6 +5,7 @@ import { promisify } from "node:util";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  claudeCodeAddArgs,
   connectToClaude,
   disconnectFromClaude,
   isConnectedToClaude,
@@ -80,6 +81,19 @@ test("connect-claude via npx writes an npx-launched entry pinned to this version
   assert.match(entry.command, /npx(\.cmd)?$/);
   const version = JSON.parse(await readFile(new URL("../package.json", import.meta.url), "utf8")).version;
   assert.deepEqual(entry.args, ["-y", `saldo-mcp@${version}`, "serve"]);
+});
+
+test("claude mcp add args mirror the desktop entry, env included", () => {
+  const entry = {
+    command: "/nvm/bin/npx",
+    args: ["-y", "saldo-mcp@0.1.4", "serve"],
+    env: { SALDO_DATA_DIR: "/tmp/x" },
+  };
+  assert.deepEqual(claudeCodeAddArgs(entry), [
+    "mcp", "add", "--scope", "user",
+    "--env", "SALDO_DATA_DIR=/tmp/x",
+    "saldo", "--", "/nvm/bin/npx", "-y", "saldo-mcp@0.1.4", "serve",
+  ]);
 });
 
 test("saldo doctor reports missing config with a pointer to init", async () => {
