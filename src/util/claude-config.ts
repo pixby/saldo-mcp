@@ -1,8 +1,11 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { homedir } from "node:os";
-import { dirname, join, resolve, sep } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isNpxInstall } from "./invocation.js";
+
+export { isNpxInstall };
 
 /**
  * Reads/writes Claude Desktop's config so self-hosters never touch JSON by
@@ -34,11 +37,6 @@ export function claudeConfigPath(): string {
 /** Absolute path to the connector's stdio entry (dist/index.js). */
 export function stdioServerPath(): string {
   return resolve(dirname(fileURLToPath(import.meta.url)), "..", "index.js");
-}
-
-/** True when this code runs out of the npx cache rather than a real install. */
-export function isNpxInstall(): boolean {
-  return fileURLToPath(import.meta.url).includes(`${sep}_npx${sep}`);
 }
 
 /** The npx binary that ships alongside the node running us — an absolute path,

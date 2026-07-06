@@ -1,4 +1,5 @@
 import { createInterface } from "node:readline/promises";
+import { CLI } from "../util/invocation.js";
 import { stdin, stdout } from "node:process";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
@@ -122,8 +123,8 @@ export async function runInit(argv: string[]): Promise<void> {
       "",
       "Next steps:",
       "  saldo institutions SE      find your bank",
-      '  saldo link "SE:Your Bank"  connect it (BankID)',
-      "  saldo connect-claude       register Saldo in Claude Desktop",
+      `  ${CLI} link "SE:Your Bank"  connect it (BankID)`,
+      `  ${CLI} connect-claude       register Saldo in Claude Desktop`,
       "  saldo doctor               check that everything is healthy",
       "",
     ].join("\n"),

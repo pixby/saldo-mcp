@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { createEngine } from "../bootstrap.js";
+import { CLI } from "../util/invocation.js";
 import { formatMoney } from "../util/money.js";
 import { balanceTypeLabel } from "../util/balance.js";
 import { runInit } from "./init.js";
@@ -15,20 +16,22 @@ import { connectToClaude, disconnectFromClaude } from "../util/claude-config.js"
  *   saldo status                   show connected accounts + balances
  *   saldo sync                     pull latest transactions into the local cache
  */
+const usageLine = (cmd: string, desc: string) =>
+  `  ${`${CLI} ${cmd}`.padEnd(CLI.length + 24)}${desc}`;
 const USAGE = [
   "Saldo connector CLI",
   "",
-  "  saldo init                   set up Saldo (managed or self-host) — start here",
-  "  saldo institutions [SE]      list banks in a country",
-  "  saldo link <institutionId>   connect a bank (BankID)",
-  "  saldo status                 show connected accounts + balances",
-  "  saldo sync                   pull latest transactions into the local cache",
-  "  saldo sessions               list bank connections + consent expiry",
-  "  saldo disconnect <id>        disconnect a bank connection (revokes consent)",
-  "  saldo serve                  run the MCP server on stdio (what Claude launches)",
-  "  saldo connect-claude         register Saldo in Claude Desktop",
-  "  saldo disconnect-claude      remove Saldo from Claude Desktop",
-  "  saldo doctor                 check config, provider, cache, Claude setup",
+  usageLine("init", "set up Saldo (managed or self-host) — start here"),
+  usageLine("institutions [SE]", "list banks in a country"),
+  usageLine("link <institutionId>", "connect a bank (BankID)"),
+  usageLine("status", "show connected accounts + balances"),
+  usageLine("sync", "pull latest transactions into the local cache"),
+  usageLine("sessions", "list bank connections + consent expiry"),
+  usageLine("disconnect <id>", "disconnect a bank connection (revokes consent)"),
+  usageLine("serve", "run the MCP server on stdio (what Claude launches)"),
+  usageLine("connect-claude", "register Saldo in Claude Desktop"),
+  usageLine("disconnect-claude", "remove Saldo from Claude Desktop"),
+  usageLine("doctor", "check config, provider, cache, Claude setup"),
   "",
   "Start the MCP server with: npm start",
 ].join("\n");
@@ -90,13 +93,13 @@ async function main(): Promise<void> {
       for (const inst of institutions) {
         console.log(`${inst.id}\t${inst.name}${inst.bic ? ` (${inst.bic})` : ""}`);
       }
-      console.log(`\n${institutions.length} institutions. Use an id with: saldo link <id>`);
+      console.log(`\n${institutions.length} institutions. Use an id with: ${CLI} link <id>`);
       break;
     }
 
     case "link": {
       if (!arg) {
-        throw new Error('Usage: saldo link "<institutionId>"  (see: saldo institutions)');
+        throw new Error(`Usage: ${CLI} link "<institutionId>"  (see: ${CLI} institutions)`);
       }
       const result = await engine.link(arg, (url) => {
         console.log("\nOpen this URL and authenticate with your bank (BankID):\n");
@@ -110,7 +113,7 @@ async function main(): Promise<void> {
     case "status": {
       const accounts = await engine.listAccounts();
       if (!accounts.length) {
-        console.log("No accounts connected. Start with: saldo link <institutionId>");
+        console.log(`No accounts connected. Start with: ${CLI} link <institutionId>`);
         return;
       }
       for (const account of accounts) {
@@ -122,7 +125,7 @@ async function main(): Promise<void> {
       const expiring = (await engine.consentStatus()).filter((s) => s.expiringSoon);
       for (const s of expiring) {
         const when = s.daysLeft === undefined ? "" : s.daysLeft < 0 ? " (expired)" : ` (${s.daysLeft} days left)`;
-        console.log(`\n⚠ Consent for ${s.institutionId} needs renewal${when} — run: saldo link "${s.institutionId}"`);
+        console.log(`\n⚠ Consent for ${s.institutionId} needs renewal${when} — run: ${CLI} link "${s.institutionId}"`);
       }
       break;
     }
@@ -130,19 +133,19 @@ async function main(): Promise<void> {
     case "sessions": {
       const sessions = await engine.listSessions();
       if (!sessions.length) {
-        console.log("No bank connections. Start with: saldo link <institutionId>");
+        console.log(`No bank connections. Start with: ${CLI} link <institutionId>`);
         return;
       }
       for (const s of sessions) {
         const exp = s.validUntil ? `expires ${s.validUntil.slice(0, 10)}` : "no expiry info";
         console.log(`${s.sessionId}\t${s.institutionId}\t${s.accountIds.length} account(s)\t${exp}`);
       }
-      console.log(`\nDisconnect one with: saldo disconnect <id>`);
+      console.log(`\nDisconnect one with: ${CLI} disconnect <id>`);
       break;
     }
 
     case "disconnect": {
-      if (!arg) throw new Error("Usage: saldo disconnect <sessionId>  (see: saldo sessions)");
+      if (!arg) throw new Error(`Usage: ${CLI} disconnect <sessionId>  (see: ${CLI} sessions)`);
       await engine.disconnect(arg);
       console.log(`Disconnected ${arg}. Consent revoked; its accounts are no longer accessible.`);
       break;

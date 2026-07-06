@@ -1,4 +1,5 @@
 import { accessSync, constants } from "node:fs";
+import { CLI } from "../util/invocation.js";
 import { defaultDataDir, loadConfig, savedConfigPath, ConfigError } from "../config.js";
 import { claudeConfigPath, isConnectedToClaude } from "../util/claude-config.js";
 import { createEngine } from "../bootstrap.js";
@@ -37,7 +38,7 @@ export async function runDoctor(): Promise<void> {
   } catch (err) {
     healthy = bad(
       err instanceof ConfigError ? err.message : `Config error: ${(err as Error).message}`,
-      "run: saldo init",
+      `run: ${CLI} init`,
     );
   }
 
@@ -67,7 +68,7 @@ export async function runDoctor(): Promise<void> {
       }
       const accounts = await engine.accountIds();
       if (accounts.length) ok(`${accounts.length} account(s) linked`);
-      else ok('No accounts linked yet — run: saldo link "<institutionId>"');
+      else ok(`No accounts linked yet — run: ${CLI} link "<institutionId>"`);
     } catch (err) {
       healthy = bad(`Engine failed to start: ${(err as Error).message}`);
     }
@@ -76,7 +77,7 @@ export async function runDoctor(): Promise<void> {
   // Claude Desktop registration.
   try {
     if (await isConnectedToClaude()) ok(`Registered in Claude Desktop (${claudeConfigPath()})`);
-    else ok("Not registered in Claude Desktop — run: saldo connect-claude");
+    else ok(`Not registered in Claude Desktop — run: ${CLI} connect-claude`);
   } catch (err) {
     healthy = bad(`Claude Desktop config unreadable: ${(err as Error).message}`);
   }

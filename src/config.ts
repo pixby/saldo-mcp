@@ -1,6 +1,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { readFileSync } from "node:fs";
+import { CLI } from "./util/invocation.js";
 
 /**
  * Runtime configuration. Environment variables win; when they're absent we fall
@@ -77,7 +78,7 @@ export function loadConfig(): Config {
     process.env.EB_PRIVATE_KEY ?? (saved?.mode === "selfhost" ? saved.privateKey : undefined);
   if (!applicationId || !privateKey) {
     throw new ConfigError(
-      "No configuration found. Run `saldo init` (writes ~/.saldo/config.json), or set " +
+      `No configuration found. Run \`${CLI} init\` (writes ~/.saldo/config.json), or set ` +
         "EB_APPLICATION_ID + EB_PRIVATE_KEY (self-host) / SALDO_BROKER_URL (managed) in the environment.",
     );
   }
