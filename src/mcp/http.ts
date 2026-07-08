@@ -2,7 +2,7 @@ import express from "express";
 import type { Server } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { Engine } from "../engine.js";
-import { buildMcpServer } from "./server.js";
+import { buildMcpServer, type McpServerOptions } from "./server.js";
 
 /**
  * Host the read-only MCP server over Streamable HTTP, bound to loopback only.
@@ -24,13 +24,14 @@ export interface HttpMcpHandle {
 export async function startHttpMcpServer(
   engine: Engine,
   port = 4321,
+  options: McpServerOptions = {},
 ): Promise<HttpMcpHandle> {
   const app = express();
   app.use(express.json());
 
   app.post("/mcp", async (req, res) => {
     try {
-      const server = buildMcpServer(engine);
+      const server = buildMcpServer(engine, options);
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: undefined, // stateless
       });

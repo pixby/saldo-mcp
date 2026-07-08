@@ -5,6 +5,7 @@
 export { createEngine } from "./bootstrap.js";
 export { Engine } from "./engine.js";
 export { buildMcpServer } from "./mcp/server.js";
+export type { McpServerOptions, ToolCallEvent } from "./mcp/server.js";
 export { startHttpMcpServer } from "./mcp/http.js";
 export type { HttpMcpHandle } from "./mcp/http.js";
 export { loadConfig, ConfigError } from "./config.js";

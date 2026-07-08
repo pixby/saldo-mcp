@@ -170,6 +170,49 @@ test("compare_periods reports spent/received/net for both periods", async () => 
   await server.close();
 });
 
+test("onToolCall hook reports call metadata only — never arguments or results", async () => {
+  const { engine } = makeEngine(undefined);
+  const events = [];
+  const server = buildMcpServer(engine, { onToolCall: (e) => events.push(e) });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "saldo-test", version: "0.0.0" });
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+  await client.callTool({ name: "search_transactions", arguments: { query: "ica" } });
+  assert.equal(events.length, 1);
+  const event = events[0];
+  assert.equal(event.tool, "search_transactions");
+  assert.equal(event.ok, true);
+  assert.equal(event.client, "saldo-test");
+  assert.ok(event.durationMs >= 0);
+  assert.ok(!Number.isNaN(Date.parse(event.startedAt)));
+  // The privacy contract: nothing from the call's input or output may appear —
+  // not the query string, not any transaction text from the result.
+  const flat = JSON.stringify(event).toLowerCase();
+  assert.doesNotMatch(flat, /ica/);
+  assert.doesNotMatch(flat, /supermarket/);
+
+  await client.close();
+  await server.close();
+});
+
+test("a throwing onToolCall observer never breaks the tool call", async () => {
+  const { engine } = makeEngine(undefined);
+  const server = buildMcpServer(engine, {
+    onToolCall: () => {
+      throw new Error("observer boom");
+    },
+  });
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "saldo-test", version: "0.0.0" });
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+  const result = await client.callTool({ name: "list_accounts", arguments: {} });
+  assert.equal(result.isError ?? false, false);
+  assert.match(result.content[0].text, /Lönekonto/);
+  await client.close();
+  await server.close();
+});
+
 test("tools answer gracefully with no linked accounts", async () => {
   const { Engine } = await import("../dist/engine.js");
   const { FakeProvider, FakeConsent } = await import("./helpers.mjs");
