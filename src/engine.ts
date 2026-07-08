@@ -4,9 +4,14 @@ import { type ConnectedSession, type ConsentStrategy, isExpired } from "./consen
 import type { Entitlement } from "./consent/consent.js";
 import type { Cache } from "./cache/cache.js";
 
-/** How much history a sync requests. Banks cap this (~90 days is typical for AIS
- *  without re-auth); we ask wide and take whatever the bank returns. */
-const SYNC_HISTORY_DAYS = 90;
+/** How much history a sync requests: wider than any bank actually serves
+ *  (most cap AIS at ~90 days; the generous ones reach a year or two, usually
+ *  right after a fresh consent), while plausible enough not to trip
+ *  date-range validators. We take whatever the bank returns. */
+const SYNC_HISTORY_DAYS = 1095; // 3 years
+/** Retry window for banks that reject an out-of-range date_from outright
+ *  (a 400) instead of clamping it to what they're willing to serve. */
+const SYNC_HISTORY_FALLBACK_DAYS = 90;
 
 /**
  * The engine is the headless core. It owns data fetching (via `provider`, which
@@ -149,13 +154,20 @@ export class Engine {
     const ids = accountId ? [accountId] : await this.consent.accountIds();
     const now = new Date().toISOString();
     const from = new Date(Date.now() - SYNC_HISTORY_DAYS * 86400_000).toISOString().slice(0, 10);
+    const fallbackFrom = new Date(Date.now() - SYNC_HISTORY_FALLBACK_DAYS * 86400_000)
+      .toISOString()
+      .slice(0, 10);
 
     let txCount = 0;
     for (const id of ids) {
-      const [account, transactions] = await Promise.all([
-        this.provider.getAccount(id),
-        this.provider.getTransactions(id, from),
-      ]);
+      const account = await this.provider.getAccount(id);
+      let transactions;
+      try {
+        transactions = await this.provider.getTransactions(id, from);
+      } catch {
+        // Bank refused the wide range — retry with a window every bank serves.
+        transactions = await this.provider.getTransactions(id, fallbackFrom);
+      }
       cache.upsertAccounts([account]);
       cache.upsertTransactions(transactions);
       cache.setLastSyncedAt(id, now);
