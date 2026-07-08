@@ -2,12 +2,15 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { join } from "node:path";
 import { Cache } from "../dist/cache/cache.js";
+import { Engine } from "../dist/engine.js";
 import {
+  FakeConsent,
   FakeProvider,
   makeEngine,
   recentTransactions,
   tempDir,
   CHECKING,
+  SAVINGS,
   TRANSACTIONS,
 } from "./helpers.mjs";
 
@@ -56,6 +59,26 @@ test("sync() pulls all linked accounts and reports counts", async () => {
   const accounts = await engine.listAccounts();
   assert.equal(accounts.length, 2);
   assert.equal(provider.calls.getAccount, before);
+  cache.close();
+});
+
+test("a warm cache never hides accounts a new consent added", async () => {
+  const dir = await tempDir();
+  const cache = await Cache.open(join(dir, "cache.db"), dir);
+  const provider = new FakeProvider(recentTransactions());
+  const engine = new Engine(provider, new FakeConsent([CHECKING]), cache);
+  await engine.sync();
+  assert.equal((await engine.listAccounts()).length, 1);
+
+  // Re-linking the bank mints an account id the cache has never seen.
+  const relinked = new Engine(provider, new FakeConsent([CHECKING, SAVINGS]), cache);
+  const before = provider.calls.getAccount;
+  const accounts = await relinked.listAccounts();
+  assert.equal(accounts.length, 2, "the fresh account must appear despite the warm cache");
+  assert.equal(provider.calls.getAccount, before + 1, "only the missing account is fetched");
+  // ...and it is cached now, so the next read stays local.
+  await relinked.listAccounts();
+  assert.equal(provider.calls.getAccount, before + 1);
   cache.close();
 });
 

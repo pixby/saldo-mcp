@@ -98,14 +98,16 @@ export class Engine {
 
   async listAccounts(): Promise<Account[]> {
     const ids = await this.consent.accountIds();
-    if (this.cache) {
-      const cached = this.cache.getAccounts();
-      if (cached.length) return cached;
-      const fresh = await Promise.all(ids.map((id) => this.provider.getAccount(id)));
-      this.cache.upsertAccounts(fresh);
-      return fresh;
-    }
-    return Promise.all(ids.map((id) => this.provider.getAccount(id)));
+    if (!this.cache) return Promise.all(ids.map((id) => this.provider.getAccount(id)));
+    // Serve from the cache, but never let it hide a fresh consent: re-linking
+    // a bank mints account ids the cache has not seen yet — fetch just those.
+    const cached = this.cache.getAccounts();
+    const have = new Set(cached.map((a) => a.id));
+    const missing = ids.filter((id) => !have.has(id));
+    if (!missing.length) return cached;
+    const fresh = await Promise.all(missing.map((id) => this.provider.getAccount(id)));
+    this.cache.upsertAccounts(fresh);
+    return [...cached, ...fresh];
   }
 
   /** Balances are current-state and low-volume, so always fetched live. */
