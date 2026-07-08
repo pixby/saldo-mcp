@@ -93,6 +93,22 @@ export class BrokerClient {
     return this.authed<{ url: string }>("POST", "/v1/billing/checkout", { plan });
   }
 
+  /** Ask the broker to email a subscription-restore code. The broker answers
+   *  the same way whether or not the email has an account. */
+  async restoreStart(email: string): Promise<void> {
+    await this.authed("POST", "/v1/restore/start", { email });
+  }
+
+  /** Verify an emailed restore code. On success the broker attaches this
+   *  device to the account and the entitlement reflects the restored
+   *  subscription. Codes are short-lived and single-use. */
+  async restoreVerify(
+    email: string,
+    code: string,
+  ): Promise<{ email: string; entitlement: Entitlement }> {
+    return this.authed("POST", "/v1/restore/verify", { email, code });
+  }
+
   async getToken(force = false): Promise<string> {
     const now = Math.floor(Date.now() / 1000);
     if (force || !this.token || this.token.expiresAt - 60 <= now) {

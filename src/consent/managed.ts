@@ -54,5 +54,13 @@ export class ManagedConsent implements ConsentStrategy {
   createCheckout(plan: "individual" | "business") {
     return this.broker.createCheckout(plan);
   }
+
+  restoreStart(email: string) {
+    return this.broker.restoreStart(email);
+  }
+
+  restoreVerify(email: string, code: string) {
+    return this.broker.restoreVerify(email, code);
+  }
 }
 

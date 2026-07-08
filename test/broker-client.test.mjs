@@ -27,6 +27,21 @@ function fakeBroker(valid) {
         res.writeHead(200, { "content-type": "application/json" });
         return res.end(JSON.stringify({ institutions: [{ id: "SE:Testbanken", name: "Testbanken" }] }));
       }
+      if (req.method === "POST" && req.url === "/v1/restore/start") {
+        res.writeHead(200, { "content-type": "application/json" });
+        return res.end(JSON.stringify({ sent: true }));
+      }
+      if (req.method === "POST" && req.url === "/v1/restore/verify") {
+        const { email, code } = JSON.parse(body);
+        if (code !== "123456") {
+          res.writeHead(401, { "content-type": "application/json" });
+          return res.end(JSON.stringify({ error: "Invalid or expired code." }));
+        }
+        res.writeHead(200, { "content-type": "application/json" });
+        return res.end(
+          JSON.stringify({ email, entitlement: { status: "subscribed", plan: "individual" } }),
+        );
+      }
       res.writeHead(404);
       res.end();
     });
@@ -97,4 +112,22 @@ test("persistent 401 fails fast instead of looping", async (t) => {
   await assert.rejects(() => client.listInstitutions("SE"), /401/);
   // register + call + re-register + retried call = 4; anything more is a loop.
   assert.ok(requests <= 4, `expected bounded retries, saw ${requests} requests`);
+});
+
+test("restore: start posts the email; verify returns the restored entitlement", async (t) => {
+  const { server } = fakeBroker({ deviceId: "dev-1", deviceSecret: "sec-1" });
+  t.after(() => server.close());
+  const base = await listen(server);
+  const client = new BrokerClient(base, await tempDir());
+
+  await client.restoreStart("anna@example.com"); // resolves without throwing
+
+  const restored = await client.restoreVerify("anna@example.com", "123456");
+  assert.equal(restored.email, "anna@example.com");
+  assert.equal(restored.entitlement.status, "subscribed");
+
+  await assert.rejects(
+    () => client.restoreVerify("anna@example.com", "000000"),
+    /Invalid or expired code/,
+  );
 });

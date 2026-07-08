@@ -43,6 +43,11 @@ export interface ConsentStrategy {
    *  billing, so these are optional; the engine substitutes "unlimited". */
   entitlement?(): Promise<Entitlement>;
   createCheckout?(plan: "individual" | "business"): Promise<{ url: string }>;
+
+  /** Restore an existing subscription onto this device by proving ownership
+   *  of the email it was bought with (managed mode only). */
+  restoreStart?(email: string): Promise<void>;
+  restoreVerify?(email: string, code: string): Promise<{ email: string; entitlement: Entitlement }>;
 }
 
 /** Re-exported billing shape (defined next to the broker client contract). */

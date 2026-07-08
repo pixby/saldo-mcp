@@ -81,6 +81,25 @@ export class Engine {
     return this.consent.createCheckout(plan);
   }
 
+  /** Email a subscription-restore code (managed mode only). */
+  restoreSubscriptionStart(email: string): Promise<void> {
+    if (!this.consent.restoreStart) {
+      return Promise.reject(new Error("Restore applies to the managed tier only."));
+    }
+    return this.consent.restoreStart(email);
+  }
+
+  /** Verify a restore code; on success this device carries the subscription. */
+  restoreSubscriptionVerify(
+    email: string,
+    code: string,
+  ): Promise<{ email: string; entitlement: Entitlement }> {
+    if (!this.consent.restoreVerify) {
+      return Promise.reject(new Error("Restore applies to the managed tier only."));
+    }
+    return this.consent.restoreVerify(email, code);
+  }
+
   async consentStatus(
     withinDays = 14,
   ): Promise<{ sessionId: string; institutionId: string; validUntil?: string; daysLeft?: number; expiringSoon: boolean }[]> {
