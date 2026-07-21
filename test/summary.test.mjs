@@ -1,14 +1,23 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { getRecurringCharges, spendingByCategory, summarizePeriod } from "../dist/summary.js";
-import { categorize } from "../dist/categorize.js";
 import { TRANSACTIONS } from "./helpers.mjs";
 
-test("spendingByCategory groups outflows only, largest first", () => {
-  const summary = spendingByCategory(TRANSACTIONS);
+// Categories come from stored transaction labels (data enrichment), keyed by
+// the exact transaction text. This is the map enrichment would have written
+// for the fixture set.
+const LABELS = new Map([
+  ["Wallenstam AB", "Housing"],
+  ["ICA Supermarket Aptiten", "Groceries"],
+  ["Coop Konsum", "Groceries"],
+  ["Spotify AB", "Subscriptions"],
+]);
+
+test("spendingByCategory groups outflows by stored label, largest first", () => {
+  const summary = spendingByCategory(TRANSACTIONS, "category", LABELS);
   // Salary inflows must not appear as a spending category.
   assert.ok(!summary.some((s) => s.category === "Income"));
-  // Rent (Wallenstam → Housing) dominates the fixtures.
+  // Rent (Wallenstam, labeled Housing) dominates the fixtures.
   assert.equal(summary[0].category, "Housing");
   assert.equal(summary[0].spentMinor, 3 * 850000);
   assert.equal(summary[0].transactionCount, 3);
@@ -19,8 +28,48 @@ test("spendingByCategory groups outflows only, largest first", () => {
   for (const s of summary) assert.ok(s.spentMinor > 0);
 });
 
+test("spending without a stored label reports as Uncategorized", () => {
+  const summary = spendingByCategory(TRANSACTIONS); // no labels at all
+  assert.ok(summary.some((s) => s.category === "Uncategorized"));
+  assert.ok(!summary.some((s) => s.category === "Housing"), "no labels → no categories");
+  // Grouping by exact counterparty ignores labels entirely.
+  const byParty = spendingByCategory(TRANSACTIONS, "counterparty");
+  assert.ok(byParty.some((s) => s.category === "Wallenstam AB"));
+});
+
 test("spendingByCategory of an empty period is empty", () => {
   assert.deepEqual(spendingByCategory([]), []);
+});
+
+test("internal transfers are excluded from spending, recurring and period totals", () => {
+  const mk = (id, amountMinor, bookedAt, kind, counterparty) => ({
+    id,
+    accountId: "acc",
+    bookedAt,
+    amount: { amountMinor, currency: "SEK" },
+    counterparty,
+    kind,
+    status: "booked",
+  });
+  const txs = [
+    mk("s1", -45210, "2025-06-10", "card", "ICA Supermarket Aptiten"), // real spend
+    // A big move between the user's own accounts in both months — must NOT count.
+    mk("i1", -600000, "2025-05-15", "internal_transfer", "Eget sparkonto"),
+    mk("i2", -600000, "2025-06-15", "internal_transfer", "Eget sparkonto"),
+    mk("i3", 600000, "2025-06-16", "internal_transfer", "Lönekonto"), // the inflow leg
+  ];
+
+  const spend = spendingByCategory(txs);
+  assert.equal(spend.reduce((n, s) => n + s.spentMinor, 0), 45210, "only the real card spend counts");
+  assert.ok(!spend.some((s) => s.category === "Transfers"));
+
+  // Appears in two months but is an internal move → not a recurring charge.
+  assert.deepEqual(getRecurringCharges(txs), []);
+
+  const june = summarizePeriod(txs.filter((t) => t.bookedAt.startsWith("2025-06")));
+  assert.equal(june.spentMinor, 45210, "internal transfer out is not spending");
+  assert.equal(june.receivedMinor, 0, "internal transfer in is not income");
+  assert.equal(june.transactionCount, 1, "internal transfers are left out of the count");
 });
 
 test("getRecurringCharges finds charges present in >= 2 distinct months", () => {
@@ -62,18 +111,4 @@ test("summarizePeriod of nothing is all zeros", () => {
     netMinor: 0,
     transactionCount: 0,
   });
-});
-
-test("categorize matches Swedish merchants and falls back sensibly", () => {
-  const t = (counterparty, amountMinor = -100, description) => ({
-    counterparty,
-    description,
-    amount: { amountMinor, currency: "SEK" },
-  });
-  assert.equal(categorize(t("ICA Supermarket Aptiten")), "Groceries");
-  assert.equal(categorize(t("Spotify AB")), "Subscriptions");
-  assert.equal(categorize(t("Wallenstam AB")), "Housing");
-  assert.equal(categorize(t("SL")), "Transport");
-  assert.equal(categorize(t("Okänd Butik AB")), "Uncategorized");
-  assert.equal(categorize(t("Arbetsgivaren AB", 3500000)), "Income");
 });

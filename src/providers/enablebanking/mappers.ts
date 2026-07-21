@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Account, Balance, Institution, Transaction } from "../../domain/types.js";
 import { toMinorUnits } from "../../util/money.js";
+import type { TransactionKind } from "../../domain/types.js";
 import type {
   EBAccountDetails,
   EBAspsp,
@@ -73,8 +74,28 @@ export function mapTransaction(accountId: string, t: EBTransaction): Transaction
     amount: { amountMinor, currency: t.transaction_amount.currency },
     description: t.remittance_information?.join(" ") || undefined,
     counterparty: counterparty ?? undefined,
+    kind: mapKind(t.bank_transaction_code?.description),
     status: "booked",
   };
+}
+
+/**
+ * Map a bank transaction-code label to a coarse, provider-neutral kind. The
+ * labels are bank-specific free text (these cover Nordea's Swedish set); an
+ * unrecognised label returns undefined so behaviour is unchanged. Other
+ * providers add their own vocabulary here or in their own mapper.
+ */
+function mapKind(description?: string): TransactionKind | undefined {
+  if (!description) return undefined;
+  const d = description.toLowerCase();
+  if (d.includes("överföring") || d.includes("overföring") || d.includes("overforing")) {
+    // "egna" = the user's own accounts; anything else is a transfer to a third party.
+    return d.includes("egna") ? "internal_transfer" : "transfer";
+  }
+  if (d.includes("kortköp") || d.includes("kortkop") || d.includes("card")) return "card";
+  if (d.includes("autogiro") || d.includes("direct debit")) return "direct_debit";
+  if (d.includes("swish") || d.includes("bankgiro") || d.includes("bank giro")) return "transfer";
+  return undefined;
 }
 
 /** Stable id for banks that omit a transaction id, so re-fetches dedupe. */

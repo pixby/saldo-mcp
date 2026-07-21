@@ -122,10 +122,11 @@ export async function runInit(argv: string[]): Promise<void> {
     [
       "",
       "Next steps:",
-      "  saldo institutions SE      find your bank",
+      `  ${CLI} institutions SE      find your bank`,
       `  ${CLI} link "SE:Your Bank"  connect it (BankID)`,
+      `  ${CLI} sync                 pull history into the encrypted local cache`,
       `  ${CLI} connect-claude       register Saldo in Claude Desktop`,
-      "  saldo doctor               check that everything is healthy",
+      `  ${CLI} doctor               check that everything is healthy`,
       "",
     ].join("\n"),
   );

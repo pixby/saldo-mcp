@@ -4,6 +4,7 @@ import type { Engine } from "../engine.js";
 import type { Transaction } from "../domain/types.js";
 import { formatMinor, formatMoney } from "../util/money.js";
 import { balanceTypeLabel } from "../util/balance.js";
+import { CATEGORIES } from "../labels.js";
 import {
   getRecurringCharges,
   spendingByCategory,
@@ -31,9 +32,12 @@ export interface McpServerOptions {
 }
 
 /**
- * Read-only MCP surface. Every tool is a query; nothing here can move money or
- * mutate bank state. Tools return compact, pre-computed text so assistants can
- * answer cheaply without re-deriving totals from raw dumps.
+ * MCP surface. Read-only toward the bank: nothing here can move money or
+ * mutate bank state. The one write surface is local — set_transaction_labels
+ * stores spending-category labels in the encrypted cache, so the assistant the
+ * user already talks to can do the classifying (no extra key, no extra data
+ * egress: it already reads the transactions). Tools return compact,
+ * pre-computed text so assistants answer cheaply without re-deriving totals.
  */
 export function buildMcpServer(engine: Engine, options: McpServerOptions = {}): McpServer {
   const server = new McpServer({ name: "saldo-connector", version: "0.1.0" });
@@ -168,12 +172,123 @@ export function buildMcpServer(engine: Engine, options: McpServerOptions = {}): 
     instrument("spending_by_category", async ({ period, group_by }) => {
       const { from, to } = periodToRange(period);
       const txs = await engine.getAllTransactions(from, to);
-      const summary = spendingByCategory(txs, group_by ?? "category");
+      const summary = spendingByCategory(txs, group_by ?? "category", engine.transactionLabels());
       if (!summary.length) return text("No spending in that period.");
       const lines = summary.map((s) =>
         `- ${s.category}: ${formatMinor(s.spentMinor, s.currency)} (${s.transactionCount}×)`,
       );
+      // Nudge, don't block: the assistant can label the tail (or offer to)
+      // and re-run this for a better answer — but the summary always answers.
+      const uncategorized = summary.find((s) => s.category === "Uncategorized");
+      if (group_by !== "counterparty" && uncategorized) {
+        lines.push(
+          "",
+          `Note: ${uncategorized.transactionCount} transaction(s) have no category label yet ` +
+            "(grouped under Uncategorized). You can fix that now: call " +
+            "get_unlabeled_transactions, classify each description, save with " +
+            "set_transaction_labels, then re-run this tool.",
+        );
+      }
       return text(lines.join("\n"));
+    }),
+  );
+
+  // --- labeling (the one local write surface) --------------------------------
+
+  server.tool(
+    "get_unlabeled_transactions",
+    "List distinct transaction descriptions that have no spending-category label yet. " +
+      "Classify them yourself and save the results with set_transaction_labels.",
+    {
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(200)
+        .optional()
+        .describe("Max descriptions to return (default 100); call again for the rest"),
+    },
+    instrument("get_unlabeled_transactions", async ({ limit }) => {
+      const texts = await engine.unlabeledDescriptions();
+      if (!texts.length) return text("Every transaction already has a category label.");
+      const shown = texts.slice(0, limit ?? 100);
+      const header =
+        `${texts.length} unlabeled transaction description(s)` +
+        (texts.length > shown.length ? ` (showing ${shown.length})` : "") +
+        ":";
+      const footer =
+        `\nClassify each into exactly one of: ${CATEGORIES.join(", ")} — then save with ` +
+        "set_transaction_labels (skip any you genuinely can't place).";
+      return text([header, ...shown.map((t) => `- ${t}`), footer].join("\n"));
+    }),
+  );
+
+  server.tool(
+    "set_transaction_labels",
+    "Save spending-category labels for transaction descriptions. Writes only to the local " +
+      "encrypted cache on the user's device — nothing is sent anywhere and nothing at the " +
+      "bank changes. Also use it to correct an existing label.",
+    {
+      labels: z
+        .array(
+          z.object({
+            text: z
+              .string()
+              .describe("The transaction description, exactly as returned by other tools"),
+            category: z.enum(CATEGORIES).describe("The spending category"),
+          }),
+        )
+        .min(1)
+        .max(200)
+        .describe("One entry per description"),
+    },
+    instrument("set_transaction_labels", async ({ labels }) => {
+      const client = server.server.getClientVersion()?.name;
+      const result = await engine.applyLabels(labels, client ? `assistant:${client}` : "assistant");
+      const { unlabeled } = await engine.enrichmentStatus();
+      const parts = [`Stored ${result.stored} label(s).`];
+      if (result.rejected.length) {
+        parts.push(
+          `${result.rejected.length} entr(y/ies) were ignored — the text didn't match any ` +
+            "cached transaction (labels must use descriptions exactly as the tools return them).",
+        );
+      }
+      parts.push(
+        unlabeled === 0
+          ? "Every transaction now has a category."
+          : `${unlabeled} description(s) still unlabeled — call get_unlabeled_transactions for the rest.`,
+      );
+      return text(parts.join(" "));
+    }),
+  );
+
+  server.prompt(
+    "label-transactions",
+    "Label the user's bank transactions with spending categories (runs entirely through " +
+      "the local Saldo tools; labels are stored on the user's device).",
+    () => ({
+      messages: [
+        {
+          role: "user" as const,
+          content: {
+            type: "text" as const,
+            text: [
+              "Please label my bank transactions with spending categories:",
+              "",
+              "1. Call get_unlabeled_transactions.",
+              "2. Classify each description into exactly one of the listed categories. The",
+              "   descriptions are raw bank statement text (any language) and often carry",
+              "   card-purchase markers, payment rails, or dates around the payee — use",
+              "   those as clues plus what you know about the merchant. Skip a description",
+              "   only if you genuinely cannot tell.",
+              "3. Save the batch with set_transaction_labels.",
+              "4. Repeat until get_unlabeled_transactions returns nothing you can place.",
+              "5. Finish with one line: how many you labeled and how many you skipped —",
+              "   then suggest re-running spending_by_category.",
+            ].join("\n"),
+          },
+        },
+      ],
     }),
   );
 

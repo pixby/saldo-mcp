@@ -3,6 +3,7 @@ import type { BankProvider } from "./providers/provider.js";
 import { type ConnectedSession, type ConsentStrategy, isExpired } from "./consent/consent.js";
 import type { Entitlement } from "./consent/consent.js";
 import type { Cache } from "./cache/cache.js";
+import { CATEGORIES, transactionText } from "./labels.js";
 
 /** How much history a sync requests: wider than any bank actually serves
  *  (most cap AIS at ~90 days; the generous ones reach a year or two, usually
@@ -160,6 +161,70 @@ export class Engine {
     }
     const nested = await Promise.all(ids.map((id) => this.provider.getTransactions(id, from, to)));
     return nested.flat().sort((a, b) => (b.bookedAt ?? "").localeCompare(a.bookedAt ?? ""));
+  }
+
+  // --- transaction labels (data enrichment) ----------------------------------
+  // Labels live in the cache, one per distinct transaction text — exact
+  // strings, no normalization, a 1:1 match with what the user sees in their
+  // own internet bank. They're written by the user's assistant over MCP
+  // (get_unlabeled_transactions → set_transaction_labels); the engine only
+  // validates and stores.
+
+  /** Stored text → category labels (empty without a cache). */
+  transactionLabels(): Map<string, string> {
+    if (!this.cache) return new Map();
+    return new Map(this.cache.getTransactionLabels().map((l) => [l.text, l.category]));
+  }
+
+  /** Distinct outflow transaction texts in the cache with no stored label yet. */
+  async unlabeledDescriptions(): Promise<string[]> {
+    if (!this.cache) return [];
+    const labeled = this.transactionLabels();
+    const seen = new Set<string>();
+    for (const tx of this.cache.getAllTransactions()) {
+      if (tx.amount.amountMinor >= 0 || tx.kind === "internal_transfer") continue;
+      const text = transactionText(tx);
+      if (!text || labeled.has(text)) continue;
+      seen.add(text);
+    }
+    return [...seen];
+  }
+
+  /** How much of the cached spending data is labeled. */
+  async enrichmentStatus(): Promise<{ labeled: number; unlabeled: number }> {
+    return {
+      labeled: this.transactionLabels().size,
+      unlabeled: (await this.unlabeledDescriptions()).length,
+    };
+  }
+
+  /**
+   * Store labels written by an assistant. Only texts that actually appear in
+   * cached transactions and categories from the taxonomy are accepted — an
+   * assistant (or anything that prompts it) can never invent categories or
+   * plant labels for strings that don't exist. Relabeling a text is allowed
+   * (that's how corrections work).
+   */
+  async applyLabels(
+    labels: { text: string; category: string }[],
+    source = "assistant",
+  ): Promise<{ stored: number; rejected: string[] }> {
+    const cache = this.cache;
+    if (!cache) throw new Error("Labeling needs the local cache.");
+    const known = new Set(cache.getAllTransactions().map(transactionText));
+    const now = new Date().toISOString();
+    const valid: { text: string; category: string; source: string; labeledAt: string }[] = [];
+    const rejected: string[] = [];
+    for (const label of labels) {
+      const text = label.text?.trim();
+      if (text && known.has(text) && (CATEGORIES as readonly string[]).includes(label.category)) {
+        valid.push({ text, category: label.category, source, labeledAt: now });
+      } else {
+        rejected.push(label.text ?? "");
+      }
+    }
+    cache.upsertTransactionLabels(valid);
+    return { stored: valid.length, rejected };
   }
 
   /**

@@ -1,6 +1,6 @@
 {
   "name": "saldo-mcp",
-  "version": "0.1.9",
+  "version": "0.2.0",
   "description": "Saldo local connector \u2014 read-only MCP bridge between Nordic bank accounts and AI assistants.",
   "type": "module",
   "engines": {

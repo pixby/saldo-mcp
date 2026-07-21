@@ -37,6 +37,25 @@ test("mapTransaction folds DBIT/CRDT indicator into the amount sign", () => {
   assert.equal(credit.counterparty, "Someone Else"); // debtor for inflows
 });
 
+test("mapTransaction derives a coarse kind from the bank transaction code", () => {
+  const base = {
+    booking_date: "2025-06-10",
+    transaction_amount: { amount: "100.00", currency: "SEK" },
+    credit_debit_indicator: "DBIT",
+  };
+  const kindOf = (description) =>
+    mapTransaction("acc-1", { ...base, bank_transaction_code: { description } }).kind;
+
+  assert.equal(kindOf("Kortköp"), "card");
+  assert.equal(kindOf("Överföring egna"), "internal_transfer"); // own accounts
+  assert.equal(kindOf("Överföring andras"), "transfer"); // to someone else
+  assert.equal(kindOf("Autogiro"), "direct_debit");
+  assert.equal(kindOf("Swish Företag"), "transfer");
+  assert.equal(kindOf("BankGiro"), "transfer");
+  assert.equal(kindOf("Något helt annat"), undefined); // unknown label → unchanged behaviour
+  assert.equal(mapTransaction("acc-1", base).kind, undefined); // no code at all
+});
+
 test("mapTransaction synthesizes a stable id when the bank omits one", () => {
   const noId = {
     booking_date: "2025-06-10",

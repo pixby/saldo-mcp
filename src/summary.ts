@@ -1,5 +1,5 @@
 import type { Transaction } from "./domain/types.js";
-import { categorize } from "./categorize.js";
+import { transactionText } from "./labels.js";
 
 /**
  * Pure functions that turn raw transactions into the pre-computed summaries the
@@ -7,8 +7,8 @@ import { categorize } from "./categorize.js";
  * to test and reuse. Amounts stay in minor units throughout.
  *
  * Note: open-banking APIs don't reliably return a merchant category, so
- * "category" here is derived from the counterparty. Good enough for a first cut;
- * a real categorizer (rules/ML) can replace `deriveCategory` later.
+ * categories come from the stored merchant labels written by data enrichment
+ * (see categorizer.ts); transactions without a label report "Uncategorized".
  */
 
 export interface CategorySummary {
@@ -41,19 +41,22 @@ function yearMonth(tx: Transaction): string | undefined {
   return tx.bookedAt?.slice(0, 7);
 }
 
-/** Group spending (outflows only) by derived category (default) or by exact
- *  counterparty, largest first. */
+/** Group spending (outflows only) by labeled category (default) or by exact
+ *  counterparty, largest first. `labels` maps exact transaction texts to
+ *  categories (see Engine.transactionLabels); unlabeled spending is
+ *  "Uncategorized". */
 export function spendingByCategory(
   transactions: Transaction[],
   groupBy: "category" | "counterparty" = "category",
+  labels: ReadonlyMap<string, string> = new Map(),
 ): CategorySummary[] {
   const byCategory = new Map<string, CategorySummary>();
   for (const tx of transactions) {
-    if (tx.amount.amountMinor >= 0) continue; // outflows only
+    if (tx.amount.amountMinor >= 0 || tx.kind === "internal_transfer") continue; // real outflows only
     const key =
       groupBy === "counterparty"
-        ? tx.counterparty?.trim() || tx.description?.trim() || "Unknown"
-        : categorize(tx);
+        ? transactionText(tx) || "Unknown"
+        : labels.get(transactionText(tx)) ?? "Uncategorized";
     const existing = byCategory.get(key);
     if (existing) {
       existing.spentMinor += -tx.amount.amountMinor;
@@ -81,7 +84,7 @@ export function getRecurringCharges(
 ): RecurringCharge[] {
   const groups = new Map<string, { amounts: number[]; months: Set<string>; currency: string }>();
   for (const tx of transactions) {
-    if (tx.amount.amountMinor >= 0) continue;
+    if (tx.amount.amountMinor >= 0 || tx.kind === "internal_transfer") continue;
     const party = tx.counterparty?.trim();
     const month = yearMonth(tx);
     if (!party || !month) continue;
@@ -111,9 +114,14 @@ export function getRecurringCharges(
 export function summarizePeriod(transactions: Transaction[]): PeriodComparison {
   let spentMinor = 0;
   let receivedMinor = 0;
+  let transactionCount = 0;
   let currency = "";
   for (const tx of transactions) {
+    // Internal moves between the user's own accounts are neither income nor
+    // spending — leave them out of the totals (and the count) entirely.
+    if (tx.kind === "internal_transfer") continue;
     currency ||= tx.amount.currency;
+    transactionCount += 1;
     if (tx.amount.amountMinor < 0) spentMinor += -tx.amount.amountMinor;
     else receivedMinor += tx.amount.amountMinor;
   }
@@ -122,6 +130,6 @@ export function summarizePeriod(transactions: Transaction[]): PeriodComparison {
     spentMinor,
     receivedMinor,
     netMinor: receivedMinor - spentMinor,
-    transactionCount: transactions.length,
+    transactionCount,
   };
 }

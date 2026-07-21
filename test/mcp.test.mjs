@@ -2,8 +2,10 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import { join } from "node:path";
 import { buildMcpServer } from "../dist/mcp/server.js";
-import { amt, makeEngine } from "./helpers.mjs";
+import { Cache } from "../dist/cache/cache.js";
+import { amt, makeEngine, tempDir, CHECKING, SAVINGS, TRANSACTIONS } from "./helpers.mjs";
 
 /**
  * The MCP tool surface IS the product — these tests pin its shape and behavior
@@ -16,8 +18,10 @@ const EXPECTED_TOOLS = [
   "get_balances",
   "get_recurring_charges",
   "get_transactions",
+  "get_unlabeled_transactions",
   "list_accounts",
   "search_transactions",
+  "set_transaction_labels",
   "spending_by_category",
 ];
 
@@ -36,17 +40,19 @@ async function callText(client, name, args = {}) {
   return result.content.map((c) => c.text).join("\n");
 }
 
-test("tool surface is exactly the seven read-only tools", async () => {
+test("tool surface is exactly the expected tools, read-only toward the bank", async () => {
   const { client, server } = await connectedClient();
   const { tools } = await client.listTools();
   assert.deepEqual(tools.map((t) => t.name).sort(), EXPECTED_TOOLS);
-  // Guardrail: read-only always. No tool name may suggest mutation and no
-  // payment/transfer capability may ever appear — read-only is a hard product rule.
+  // Guardrail: read-only toward the BANK is a hard product rule — no payment
+  // or transfer capability may ever appear. The one write surface is
+  // set_transaction_labels, which writes category labels to the local cache
+  // and cannot touch bank state.
   for (const tool of tools) {
     assert.doesNotMatch(
       tool.name,
       /pay|transfer|send|create|write|update|delete|initiate/i,
-      `tool "${tool.name}" suggests mutation`,
+      `tool "${tool.name}" suggests bank mutation`,
     );
   }
   await client.close();
@@ -141,12 +147,93 @@ test("spending_by_category can group by exact counterparty", async () => {
   await server.close();
 });
 
-test("spending_by_category summarizes a YYYY-MM period", async () => {
-  const { client, server } = await connectedClient();
+test("spending_by_category summarizes a YYYY-MM period using stored labels", async () => {
+  // Labels live in the cache (written by data enrichment) — build an engine
+  // over a cache seeded with the fixtures and two labeled merchants.
+  const dir = await tempDir();
+  const cache = await Cache.open(join(dir, "cache.db"), dir);
+  cache.upsertTransactions(TRANSACTIONS);
+  cache.setLastSyncedAt(CHECKING, "2025-07-01T00:00:00Z");
+  cache.setLastSyncedAt(SAVINGS, "2025-07-01T00:00:00Z");
+  const labeledAt = "2025-07-01T00:00:00Z";
+  cache.upsertTransactionLabels([
+    { text: "Wallenstam AB", category: "Housing", source: "claude:test", labeledAt },
+    { text: "ICA Supermarket Aptiten", category: "Groceries", source: "claude:test", labeledAt },
+    { text: "Coop Konsum", category: "Groceries", source: "claude:test", labeledAt },
+  ]);
+  const { engine } = makeEngine(cache);
+  const server = buildMcpServer(engine);
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "saldo-test", version: "0.0.0" });
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
   const out = await callText(client, "spending_by_category", { period: "2025-06" });
   assert.ok(out.includes(`Housing: ${amt("8 500,00 kr")} (1×)`));
   assert.ok(out.includes(`Groceries: ${amt("1 298,45 kr")} (3×)`));
+  // Spending whose merchant has no stored label stays visible, as Uncategorized.
+  assert.match(out, /Uncategorized/);
   assert.doesNotMatch(out, /Income/, "inflows are not spending");
+  await client.close();
+  await server.close();
+  cache.close();
+});
+
+test("labeling round-trip: unlabeled list → set labels → labeled spending", async () => {
+  const dir = await tempDir();
+  const cache = await Cache.open(join(dir, "cache.db"), dir);
+  cache.upsertTransactions(TRANSACTIONS);
+  cache.setLastSyncedAt(CHECKING, "2025-07-01T00:00:00Z");
+  cache.setLastSyncedAt(SAVINGS, "2025-07-01T00:00:00Z");
+  const { engine } = makeEngine(cache);
+  const server = buildMcpServer(engine);
+  const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+  const client = new Client({ name: "saldo-test", version: "0.0.0" });
+  await Promise.all([server.connect(serverTransport), client.connect(clientTransport)]);
+
+  // Unlabeled spending shows as Uncategorized, with a labeling nudge — but the
+  // summary still answers; nothing blocks on labels.
+  let out = await callText(client, "spending_by_category", { period: "2025-06" });
+  assert.match(out, /Uncategorized/);
+  assert.match(out, /get_unlabeled_transactions/);
+
+  out = await callText(client, "get_unlabeled_transactions");
+  assert.match(out, /Spotify AB/);
+  assert.match(out, /Wallenstam AB/);
+  assert.match(out, /set_transaction_labels/);
+
+  out = await callText(client, "set_transaction_labels", {
+    labels: [
+      { text: "Wallenstam AB", category: "Housing" },
+      { text: "Spotify AB", category: "Subscriptions" },
+      { text: "NOT IN THE CACHE", category: "Dining" },
+    ],
+  });
+  assert.match(out, /Stored 2 label/);
+  assert.match(out, /ignored/, "unknown texts are reported, not silently stored");
+  assert.match(out, /still unlabeled/);
+
+  out = await callText(client, "spending_by_category", { period: "2025-06" });
+  assert.ok(out.includes(`Housing: ${amt("8 500,00 kr")} (1×)`));
+
+  // Off-taxonomy categories are rejected at the protocol level (input schema).
+  const bad = await client.callTool({
+    name: "set_transaction_labels",
+    arguments: { labels: [{ text: "Spotify AB", category: "Not-a-category" }] },
+  });
+  assert.equal(bad.isError, true, "schema must reject invented categories");
+
+  await client.close();
+  await server.close();
+  cache.close();
+});
+
+test("the label-transactions prompt is exposed", async () => {
+  const { client, server } = await connectedClient();
+  const { prompts } = await client.listPrompts();
+  assert.ok(prompts.some((p) => p.name === "label-transactions"));
+  const prompt = await client.getPrompt({ name: "label-transactions" });
+  assert.match(prompt.messages[0].content.text, /get_unlabeled_transactions/);
+  assert.match(prompt.messages[0].content.text, /set_transaction_labels/);
   await client.close();
   await server.close();
 });

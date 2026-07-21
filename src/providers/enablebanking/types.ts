@@ -64,6 +64,12 @@ export interface EBTransaction {
   debtor?: { name?: string };
   creditor?: { name?: string };
   remittance_information?: string[];
+  /**
+   * Bank transaction code. The ISO 20022 `code`/`sub_code` are frequently null,
+   * but many banks put a human label in `description` (e.g. "Kortköp",
+   * "Överföring egna", "Autogiro") that we can map to a coarse kind.
+   */
+  bank_transaction_code?: { description?: string; code?: string; sub_code?: string };
 }
 
 export interface EBTransactionsResponse {

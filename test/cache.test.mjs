@@ -85,6 +85,30 @@ test("sensitive fields never hit the database file in plaintext", async () => {
   assert.ok(raw.includes(Buffer.from("2025-06-10", "utf8")));
 });
 
+test("transaction labels round-trip, upsert by exact text, and stay encrypted on disk", async () => {
+  const dir = await tempDir();
+  const dbPath = join(dir, "cache.db");
+  const cache = await Cache.open(dbPath, dir);
+  cache.upsertTransactionLabels([
+    { text: "Kortköp 260101 Testlivs AB", category: "Groceries", source: "claude:test", labeledAt: "2026-01-01T00:00:00Z" },
+    { text: "Testkrogen", category: "Dining", source: "claude:test", labeledAt: "2026-01-01T00:00:00Z" },
+  ]);
+  // Re-labeling the same exact text replaces, not duplicates.
+  cache.upsertTransactionLabels([
+    { text: "Kortköp 260101 Testlivs AB", category: "Shopping", source: "claude:test", labeledAt: "2026-01-02T00:00:00Z" },
+  ]);
+  const labels = cache.getTransactionLabels();
+  assert.equal(labels.length, 2);
+  assert.equal(labels.find((l) => l.category === "Shopping").text, "Kortköp 260101 Testlivs AB");
+  cache.close();
+
+  // The texts live only inside the encrypted payload.
+  const raw = await readFile(dbPath);
+  for (const secret of ["Testlivs", "Kortköp", "Testkrogen", "Groceries"]) {
+    assert.ok(!raw.includes(Buffer.from(secret, "utf8")), `"${secret}" must not appear in cleartext`);
+  }
+});
+
 test("sync bookkeeping stores last-synced timestamps per account", async () => {
   const dir = await tempDir();
   const cache = await Cache.open(join(dir, "cache.db"), dir);

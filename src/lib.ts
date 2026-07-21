@@ -1,6 +1,6 @@
 /**
- * Public library surface — what other packages in the monorepo (the Mac App)
- * import. Keeps consumers off deep paths so we can refactor internals freely.
+ * Public library surface — what embedders (like the Saldo Mac app) import.
+ * Keeps consumers off deep paths so internals can be refactored freely.
  */
 export { createEngine } from "./bootstrap.js";
 export { Engine } from "./engine.js";
@@ -12,11 +12,14 @@ export { loadConfig, ConfigError } from "./config.js";
 export type { Config, Mode } from "./config.js";
 export type { Entitlement } from "./broker-client.js";
 export { formatMinor, formatMoney, toMinorUnits } from "./util/money.js";
+export { CATEGORIES, transactionText } from "./labels.js";
+export type { Category, TransactionLabel } from "./labels.js";
 export type {
   Account,
   Balance,
   Institution,
   Money,
   Transaction,
+  TransactionKind,
   TransactionStatus,
 } from "./domain/types.js";

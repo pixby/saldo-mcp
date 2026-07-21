@@ -45,6 +45,20 @@ export interface Balance {
 
 export type TransactionStatus = "booked" | "pending";
 
+/**
+ * Coarse transaction type, derived from the provider's bank-transaction code.
+ * Lets us tell genuine spending apart from money the user just moved around
+ * (e.g. a transfer between their own accounts, which is neither income nor an
+ * expense). Provider-neutral: each provider maps its own codes onto these, and
+ * an unknown/absent code simply leaves `kind` undefined (treated as before).
+ */
+export type TransactionKind =
+  | "card" // card purchase
+  | "transfer" // transfer or payment to another party
+  | "internal_transfer" // moved between the user's own accounts — not spending or income
+  | "direct_debit" // autogiro / scheduled pull
+  | "other";
+
 export interface Transaction {
   /** Provider transaction id; synthesized deterministically if the provider omits one. */
   id: string;
@@ -57,5 +71,7 @@ export interface Transaction {
   description?: string;
   /** Other party (creditor for outflows, debtor for inflows), if the bank provides it. */
   counterparty?: string;
+  /** Coarse type from the provider's transaction code, if known. */
+  kind?: TransactionKind;
   status: TransactionStatus;
 }

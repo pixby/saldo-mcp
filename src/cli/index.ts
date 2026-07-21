@@ -37,8 +37,6 @@ const USAGE = [
   usageLine("connect-claude", "register Saldo in Claude Desktop + Claude Code"),
   usageLine("disconnect-claude", "remove Saldo from Claude Desktop + Claude Code"),
   usageLine("doctor", "check config, provider, cache, Claude setup"),
-  "",
-  "Start the MCP server with: npm start",
 ].join("\n");
 
 async function main(): Promise<void> {

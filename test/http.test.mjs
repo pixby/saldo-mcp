@@ -16,7 +16,7 @@ test("MCP over Streamable HTTP on loopback serves the tool surface", async () =>
   await client.connect(new StreamableHTTPClientTransport(new URL(handle.url)));
 
   const { tools } = await client.listTools();
-  assert.equal(tools.length, 7);
+  assert.equal(tools.length, 9);
 
   const result = await client.callTool({ name: "list_accounts", arguments: {} });
   const text = result.content.map((c) => c.text).join("\n");

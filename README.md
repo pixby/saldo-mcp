@@ -53,7 +53,16 @@ Prefer running from source? `git clone https://github.com/pixby/saldo-mcp.git &&
 
 Then ask Claude: *"What did I spend on groceries last month?"*
 
-(npm package coming: `npx saldo-mcp init` — after which the command is just `saldo`.)
+### Transaction labeling
+
+`spending_by_category` gets real categories (Groceries, Dining, Transport, …)
+from **your own assistant**: ask it to *"label my transactions"* (or run the
+`label-transactions` MCP prompt) and it reads the unlabeled descriptions,
+classifies them itself, and saves the labels through `set_transaction_labels` —
+the one write tool on the surface, which can only store category labels in the
+local encrypted cache and can never touch your bank. No API key, no extra
+service, no data flow that didn't already exist. Unlabeled spending simply
+shows as "Uncategorized" until then.
 
 ## Uninstall
 
@@ -70,13 +79,15 @@ they also expire on their own after ~180 days).
 
 ## MCP tools
 
-Seven read-only tools, designed so assistants answer cheaply from pre-computed
-summaries instead of re-deriving totals from raw dumps:
+Designed so assistants answer cheaply from pre-computed summaries instead of
+re-deriving totals from raw dumps. Read-only toward your bank, always:
 
 `list_accounts` · `get_balances` · `get_transactions` (date + amount filters,
 one or all accounts) · `search_transactions` (full-text) ·
-`spending_by_category` (own Nordic merchant categorizer, or by exact counterparty) ·
-`get_recurring_charges` · `compare_periods`
+`spending_by_category` (categories from the labeling above, or by exact
+counterparty) · `get_recurring_charges` · `compare_periods` ·
+`get_unlabeled_transactions` + `set_transaction_labels` (the labeling pair —
+the only write, local category labels only)
 
 ## Architecture notes
 
@@ -90,7 +101,7 @@ one or all accounts) · `search_transactions` (full-text) ·
   Streamable HTTP on `127.0.0.1` (used by the Saldo desktop app).
 - **Money** is integer minor units (öre) internally; formatting to kr happens
   only at presentation.
-- **Tests**: `npm test` — 54 integration/unit tests over a deterministic fake
+- **Tests**: `npm test` — integration/unit tests over a deterministic fake
   provider (no bank, no network, no secrets).
 
 ## Relationship to Saldo

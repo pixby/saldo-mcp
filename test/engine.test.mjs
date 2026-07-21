@@ -100,6 +100,38 @@ test("balances are always fetched live, never cached", async () => {
   cache.close();
 });
 
+test("applyLabels stores assistant labels for known texts and rejects the rest", async () => {
+  const { engine, cache } = await cachedEngine();
+  await engine.sync();
+  // Distinct outflow texts in the recent fixtures: "Spotify AB" (3 rows) + ICA.
+  assert.deepEqual(await engine.enrichmentStatus(), { labeled: 0, unlabeled: 2 });
+
+  const result = await engine.applyLabels(
+    [
+      { text: "Spotify AB", category: "Subscriptions" },
+      { text: "NOT IN THE CACHE", category: "Dining" }, // unknown text → rejected
+      { text: "ICA Supermarket Aptiten", category: "Not-a-category" }, // bad category → rejected
+    ],
+    "assistant:test",
+  );
+  assert.equal(result.stored, 1);
+  assert.deepEqual(result.rejected, ["NOT IN THE CACHE", "ICA Supermarket Aptiten"]);
+  assert.deepEqual(await engine.enrichmentStatus(), { labeled: 1, unlabeled: 1 });
+  assert.equal(engine.transactionLabels().get("Spotify AB"), "Subscriptions");
+
+  // Relabeling the same text replaces the label — that's how corrections work.
+  await engine.applyLabels([{ text: "Spotify AB", category: "Entertainment" }]);
+  assert.equal(engine.transactionLabels().get("Spotify AB"), "Entertainment");
+  assert.deepEqual(await engine.enrichmentStatus(), { labeled: 1, unlabeled: 1 });
+  cache.close();
+});
+
+test("labeling needs the cache: status is empty and applyLabels refuses without one", async () => {
+  const { engine } = makeEngine(undefined);
+  assert.deepEqual(await engine.enrichmentStatus(), { labeled: 0, unlabeled: 0 });
+  await assert.rejects(engine.applyLabels([{ text: "X", category: "Dining" }]), /cache/);
+});
+
 test("consentStatus flags sessions expiring within the window", async () => {
   const { engine } = makeEngine(undefined);
   const status = await engine.consentStatus(365 * 10); // huge window -> expiring
